@@ -13,7 +13,7 @@
 
 #define STRING_SIZE 1024
 
-#define SERVER_HOSTNAME localhost
+#define SERVER_HOSTNAME "127.0.0.1"
 #define SERVER_PORT 11235
 
 struct udp_pkt {
