@@ -40,16 +40,16 @@ int main(int argc, char *argv[]) {
   struct hostent * server_hp;      /* Structure to store server's IP
                                         address */
   int bytes_sent, bytes_recd; /* number of bytes sent or received */
-  int successfulPackets = 0;
-  int dupPackets = 0;
-  int nonDupSucc = 0;
-  int numBytesRecieved = 0;
-  int acksSent = 0;
-  int acksLost = 0;
-  int acksSent = 0;
+  int successfulPackets;
+  int dupPackets;
+  int nonDupSucc;
+  int numBytesRecieved;
+  int acksSent;
+  int acksLost;
+  int acksSent;
   char fileName[STRING_SIZE];
   float input_ackLoss;
-  int eot = 0;
+  int eot;
   FILE *fp = fopen("out.txt", "wb");
 
   //prints if user incorrectly tries to run the client.
