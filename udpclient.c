@@ -13,8 +13,8 @@
 
 #define STRING_SIZE 1024
 
-#define SERVER_HOSTNAME "127.0.0.1"
-#define SERVER_PORT 6680
+#define SERVER_HOSTNAME localhost
+#define SERVER_PORT 11235
 
 struct udp_pkt {
   unsigned int length;
@@ -46,7 +46,6 @@ int main(int argc, char *argv[]) {
   int numBytesRecieved;
   int acksSent;
   int acksLost;
-  int acksSent;
   char fileName[STRING_SIZE];
   float input_ackLoss;
   int eot;
