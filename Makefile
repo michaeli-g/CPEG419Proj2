@@ -6,7 +6,7 @@ udpclient: udpclient.c;
 	${CC} udpclient.c -o udpclient -lm
 
 udpserver: udpserver.c;
-	${CC} udpserver.c -o udpserver
+	${CC} udpserver.c -o udpserver -lm
 
 clean:
 	rm udpclient udpserver out.txt
