@@ -119,7 +119,7 @@ int main(int argc, char *argv[]) {
   //connection variables
   unsigned short sequenceCount = 0;
   FILE *fp = NULL;
-  fp = fopen(filename, "r");
+  fp = fopen(fileName, "r");
 
   if(fp){
     char *buffer = calloc(1,BUFFER_SIZE);
