@@ -1,6 +1,6 @@
 //CPEG419-010
 //Project 2 udpserver.c
-//Stephen Eaton and Michael Guerrero 
+//Stephen Eaton and Michael Guerrero
 
 #include <ctype.h>          /* for toupper */
 #include <stdio.h>          /* for standard I/O functions */
@@ -47,7 +47,8 @@ int main(int argc, char *argv[]) {
   FILE *fp;
   
  
-  //Print message to the user showing the valid layout
+  //Check for 3 arguments from the user when they start the program.
+  //if there are not enough inputs,it tells the user the format to enter the inputs
   if( argc < 3 ){
     printf("Format: ./udpserver [timeout] [packet loss ratio]\n");
     exit(1);
@@ -63,7 +64,7 @@ int main(int argc, char *argv[]) {
     exit(1);
   }  
   
-  // Use current time as seed for random generator 
+  //set seed based on current time to generate a random number
   srand(time(0)); 
 
   int sock_server;  /* Socket on which server listens to clients */
@@ -104,6 +105,7 @@ int main(int argc, char *argv[]) {
   printf("I am here to listen ... on port %hu\n\n", server_port);
   client_addr_len = sizeof (client_addr);
 
+  //Define a new udpPacket named packetReceived 
   struct udpPacket packetReceived;
   bytes_recd = recvfrom(sock_server, &packetReceived, sizeof(packetReceived), 0, (struct sockaddr *) &client_addr, &client_addr_len);
   
@@ -111,7 +113,8 @@ int main(int argc, char *argv[]) {
     perror("Filename data receive error");
     exit(1);
   }
-
+  
+  //Request the user entered file
   unsigned int fileNameLength = ntohs(packetReceived.packetLength);
   char fileName[fileNameLength];
   strncpy(fileName, packetReceived.data, fileNameLength); 
@@ -125,6 +128,7 @@ int main(int argc, char *argv[]) {
   timing.tv_usec = millis%1000;
   setsockopt(sock_server, SOL_SOCKET, SO_RCVTIMEO, (const char*)&timing, sizeof timing);
 
+  //Open and read the user specified file
   fp = fopen(fileName, "r");
   if(fp){
     char *buff = calloc(1,BUFFER_SIZE);

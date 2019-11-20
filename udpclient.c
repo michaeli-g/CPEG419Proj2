@@ -17,6 +17,7 @@
 #define SERVER_HOSTNAME "localhost"
 #define SERVER_PORT 11235
 
+//Define the udpPacket structure
 struct udpPacket {
   uint16_t packetLength;
   uint16_t packetSequence;
@@ -48,6 +49,8 @@ int main(int argc, char *argv[]) {
   FILE *fp = fopen("out.txt", "w");
   srand(time(0)); 
   
+  //Check for 3 arguments from the user when they start the program.
+  //if there are not enough inputs,it tells the user the format to enter the inputs
   if( argc < 3 ){ 
     printf("Format: ./udpclient [file name] [ack loss ratio]\n");
     exit(1);
@@ -110,6 +113,7 @@ int main(int argc, char *argv[]) {
   unsigned short server_port = SERVER_PORT;
   server_addr.sin_port = htons(server_port);
 
+  //Define new variables
   unsigned int sequenceNumber = 0;
   unsigned int buffLen = strlen(fileName);
 
@@ -124,19 +128,20 @@ int main(int argc, char *argv[]) {
     exit(1);
   }
   
-  //Receive in a loop until end of transmission received
+  //Continue to run until the end of transmission is reached
   while(endCheck){
-	  
-    /* get response from server */
     struct udpPacket packetReceived;
     bytes_recd = recvfrom(sock_client, &packetReceived, sizeof(packetReceived), 0, (struct sockaddr *) 0, (int *) 0);
     if(bytes_recd < 0){
       perror("Data Packet receive error");
       exit(1);
     }
+	
+	//Define more variables
     unsigned int packetLength = ntohs(packetReceived.packetLength);
     unsigned int packetSequence = ntohs(packetReceived.packetSequence);
 
+    //Check for the end of transmission
     if(packetLength == 0){ 
       printf("\nEnd of Transmission Packet with sequence number %d received\n", packetSequence);
       endCheck = 0;
@@ -188,6 +193,7 @@ int main(int argc, char *argv[]) {
     fclose(fp);
   }
 
+  //Print out all the data that was collected while the program was running
   printf("Total number of data packets received successfully: %d\n", packetReceivedCount);
   printf("Number of duplicate data packets received: %d\n", packetDuplicateCount);
   printf("Number of data packets received successfully, not including duplicates: %d\n", notDuplicateCount);
