@@ -1,5 +1,6 @@
-/* udp_client.c */
-/*By Michael Guerrero & Stephen Eaton*/
+//CPEG419-010
+//Project 2 udpclient.c
+//Stephen Eaton and Michael Guerrero 
 
 #include <stdio.h>          /* for standard I/O functions */
 #include <stdlib.h>         /* for exit */
@@ -9,28 +10,64 @@
 #include <netinet/in.h>     /* for sockaddr_in */
 #include <unistd.h>         /* for close */
 #include <errno.h>          // for timeout
-#include <time.h>           // for time seed for rand()
+#include <time.h>           // for random time seed
 
-#define STRING_SIZE 1024
+#define FILE_NAME_LENGTH 1024
 
-#define SERVER_HOSTNAME "127.0.0.1"
+#define SERVER_HOSTNAME "localhost"
 #define SERVER_PORT 11235
 
-struct udp_pkt {
-  unsigned int length;
-  unsigned int sequenceNum;
+struct udpPacket {
+  uint16_t packetLength;
+  uint16_t packetSequence;
   char data[80];
 };
 
-int simulateACKLoss(float ackLoss);
+//generate random number to simulate ACK loss
+int simulateACKLoss(float ackLoss){
+  double genRandomNum = (double)rand() / (double)RAND_MAX;
+  if(genRandomNum < ackLoss){
+    return 1;
+  }
+  return 0;
+}
 
 int main(int argc, char *argv[]) {
 
-  // Seed random number
-  srand(time(0));
+  char fileName[FILE_NAME_LENGTH];
+  float userACKLoss;
+  int packetReceivedCount = 0;
+  int packetDuplicateCount = 0;
+  int notDuplicateCount = 0;
+  int byteCount = 0;
+  int ACKTransmitCount = 0;
+  int ACKDropCount = 0;
+  int ACKGeneratedCount = 0;
+  int endCheck = 1;
+  FILE *fp = fopen("out.txt", "wb");
 
-  //Initialize Variables
-  int sock_client;  /* Socket used by client */
+  if( argc < 3 ){ 
+    printf("Format: ./udpclient [file name] [ack loss ratio]\n");
+    exit(1);
+  }
+  if(strlen(argv[1]) >= FILE_NAME_LENGTH) { 
+    fprintf(stderr, "Invalid fileName length");
+    exit(1);
+  }
+  strcpy(fileName, argv[1]);
+
+  if(sscanf (argv[2], "%f", &userACKLoss)!=1) { 
+    fprintf(stderr, "Invalid ACK loss value");
+    exit(1);
+  }
+
+  //printf("Connecting to server to retrieve filename: %s, with ACK loss ratio: %0.1f\n\n", fileName, userACKLoss);
+
+  // Use current time as seed for random number generator 
+  srand(time(0)); 
+
+  int sock_client;  /* Socket used by client */ 
+
   struct sockaddr_in client_addr;  /* Internet address structure that
                                         stores client address */
   unsigned short client_port;  /* Port number used by client (local port) */
@@ -39,41 +76,8 @@ int main(int argc, char *argv[]) {
                                         stores server address */
   struct hostent * server_hp;      /* Structure to store server's IP
                                         address */
+
   int bytes_sent, bytes_recd; /* number of bytes sent or received */
-  int successfulPackets;
-  int dupPackets;
-  int nonDupSucc;
-  int numBytesRecieved;
-  int acksSent;
-  int acksLost;
-  char fileName[STRING_SIZE];
-  float input_ackLoss;
-  int eot;
-  FILE *fp = fopen("out.txt", "wb");
-
-  //prints if user incorrectly tries to run the client.
-
-  if( argc < 3 ){
-    printf("Try ./udpclient [file name] [ack loss ratio]\n");
-    exit(1);
-  }
-
-  //takes in file name
-
-  if(strlen(argv[1]) >= STRING_SIZE) {
-    fprintf(stderr, "File name is too long");
-    exit(1);
-  }
-  strcpy(fileName, argv[1]);
-
-  //takes in ALR
-
-  if(sscanf (argv[2], "%f", &input_ackLoss)!=1) {
-    fprintf(stderr, "Error reading ACK loss value");
-    exit(1);
-  }
-
-  printf("Connecting to server to retrieve %s, with an ALR of %0.1f\n\n", fileName, input_ackLoss);
 
   /* open a socket */
 
@@ -82,25 +86,27 @@ int main(int argc, char *argv[]) {
     exit(1);
   }
 
-  /* initialize client address information */
+    /* initialize client address information */
+  client_port = 0;   /* This allows choice of any available local port */
 
+  /* clear client address structure and initialize with client address */
   memset(&client_addr, 0, sizeof(client_addr));
   client_addr.sin_family = AF_INET;
-  client_addr.sin_addr.s_addr = htonl(INADDR_ANY); /* This allows choice of any host interface, if more than one are present */
+  client_addr.sin_addr.s_addr = htonl(INADDR_ANY); /* This allows choice of
+                                        any host interface, if more than one 
+                                        are present */
   client_addr.sin_port = htons(client_port);
 
   /* bind the socket to the local client port */
 
-  if (bind(sock_client, (struct sockaddr *) &client_addr, sizeof (client_addr)) < 0) {
+  if (bind(sock_client, (struct sockaddr *) &client_addr,
+           sizeof (client_addr)) < 0) {
     perror("Client: can't bind to local address\n");
     close(sock_client);
     exit(1);
   }
-
-  /* end of local address initialization and binding */
-
+  
   /* initialize server address information */
-
   if ((server_hp = gethostbyname(SERVER_HOSTNAME)) == NULL) {
     perror("Client: invalid server hostname\n");
     close(sock_client);
@@ -114,101 +120,93 @@ int main(int argc, char *argv[]) {
   unsigned short server_port = SERVER_PORT;
   server_addr.sin_port = htons(server_port);
 
-  /* send fileName */
-  unsigned int sequenceNum = 0;
+  /* send filename */
+  unsigned int sequenceNumber = 0;
   unsigned int buffLen = strlen(fileName);
 
-  struct udp_pkt newpkt;
-  newpkt.length = htons(buffLen);
-  newpkt.sequenceNum = htons(sequenceNum);
-  strncpy(newpkt.data, fileName, buffLen);
+  struct udpPacket newPacket;
+  newPacket.packetLength = htons(buffLen);
+  newPacket.packetSequence = htons(sequenceNumber);
+  strncpy(newPacket.data, fileName, buffLen);
 
-  bytes_sent = sendto(sock_client, &newpkt, buffLen+4, 0, (struct sockaddr *) &server_addr, sizeof (server_addr));
+  bytes_sent = sendto(sock_client, &newPacket, buffLen+4, 0, (struct sockaddr *) &server_addr, sizeof (server_addr));
   if(bytes_sent < 0){
-    perror("fileName Packet sending error");
+    perror("Filename Packet sending error");
     exit(1);
   }
-
-  //Run till eot packet is recieved
-  while(!eot){
+  
+  //Receive in a loop until end of transmission received
+  while(endCheck){
+	  
     /* get response from server */
-
-    struct udp_pkt receivePkt;
-    bytes_recd = recvfrom(sock_client, &receivePkt, sizeof(receivePkt), 0, (struct sockaddr *) 0, (int *) 0);
+    struct udpPacket packetReceived;
+    bytes_recd = recvfrom(sock_client, &packetReceived, sizeof(packetReceived), 0, (struct sockaddr *) 0, (int *) 0);
     if(bytes_recd < 0){
-      perror("Data Packet received with error");
+      perror("Data Packet receive error");
       exit(1);
     }
-    unsigned int length = ntohs(receivePkt.length);
-    unsigned int sequenceNum = ntohs(receivePkt.sequenceNum);
+    unsigned int packetLength = ntohs(packetReceived.packetLength);
+    unsigned int packetSequence = ntohs(packetReceived.packetSequence);
 
-    //check if packet received is the eot packet
-    if(length == 0){
-      printf("\nEnd of Transmission Packet received with sequence number %d \n", sequenceNum);
-      eot = 0;
+    if(packetLength == 0){ 
+      printf("\nEnd of Transmission Packet with sequence number %d received\n", packetSequence);
+      endCheck = 0;
     }
     else {
-      successfulPackets++;
-      if(sequenceNum == sequenceNum){
-        printf("Packet %d received with %d data bytes\n", sequenceNum, bytes_recd-4);
-        nonDupSucc++;
-        numBytesRecieved += length;
+      packetReceivedCount = packetReceivedCount + 1;
+      if(sequenceNumber == packetSequence){
+		  
+        //print stats
+        printf("Packet %d received with %d data bytes\n", packetSequence, bytes_recd-4);
+        notDuplicateCount = notDuplicateCount + 1;
+        byteCount += packetLength;
+		
+        //write received data to file
         if(fp){
-          fwrite(receivePkt.data,1,length, fp);
-          printf("Packet %d delivered to user\n", sequenceNum);
+          fwrite(packetReceived.data,1,packetLength, fp);
+          printf("Packet %d delivered to user\n", packetSequence);
         }
         else{
           perror("Error writing to file");
         }
-        sequenceNum = 1 - sequenceNum;
+        sequenceNumber = 1 - sequenceNumber;
       }
       else{
-        printf("Duplicate packet %d received with %d data bytes\n", sequenceNum, bytes_recd-4);
-        dupPackets++;
+        printf("Duplicate packet %d received with %d data bytes\n", packetSequence, bytes_recd-4);
+        packetDuplicateCount = packetDuplicateCount + 1;
       }
-
+      
       //send ACK
-      printf("ACK generated for transmission with sequence number %d\n", sequenceNum);
-      acksSent++;
-      if(!simulateACKLoss(input_ackLoss)){
-        uint16_t ack_seq = htons(sequenceNum);
+      printf("ACK %d generated for transmission\n", packetSequence);
+      ACKGeneratedCount = ACKGeneratedCount + 1;
+      if(!simulateACKLoss(userACKLoss)){
+        uint16_t ack_seq = htons(packetSequence);        
         bytes_sent = sendto(sock_client, &ack_seq, sizeof(ack_seq), 0, (struct sockaddr *) &server_addr, sizeof (server_addr));
         if(bytes_sent < 0){
           perror("ACK Packet sending error");
           exit(1);
         }
-        printf("ACK %d successfully transmitted\n", sequenceNum);
-        acksSent++;
+        printf("ACK %d successfully transmitted\n", packetSequence);
+        ACKTransmitCount = ACKTransmitCount + 1;
       }
       else{
-        printf("ACK %d lost\n", sequenceNum);
-        acksLost++;
+        printf("ACK %d lost\n", packetSequence);
+        ACKDropCount = ACKDropCount + 1;
       }
-
     }
   }
   if(fp){
-    fclose(fp);
+    fclose(fp); //close output file
   }
 
-  //print stats
-  printf("Total number of data packets received successfully %d\n", successfulPackets);
-  printf("Number of duplicate data packets received: %d\n", dupPackets);
-  printf("Number of data packets received successfully, not including duplicates: %d\n", nonDupSucc);
-  printf("Total number of data bytes received which are delivered to user: %d\n", numBytesRecieved);
-  printf("Number of ACKs transmitted without loss: %d\n", acksSent);
-  printf("Number of ACKs generated, but dropped due to loss: %d\n", acksLost);
-  printf("Total number of ACKs generated: %d\n", acksSent);
+  printf("Total number of data packets received successfully: %d\n", packetReceivedCount);
+  printf("Number of duplicate data packets received: %d\n", packetDuplicateCount);
+  printf("Number of data packets received successfully, not including duplicates: %d\n", notDuplicateCount);
+  printf("Total number of data bytes delivered to user: %d\n", byteCount);
+  printf("Number of ACKs transmitted without loss: %d\n", ACKTransmitCount);
+  printf("Number of ACKs generated but dropped due to loss: %d\n", ACKDropCount);
+  printf("Total number of ACKs generated: %d\n", ACKGeneratedCount);
 
   /* close the socket */
   close(sock_client);
-}
-
-//function that simulates ack loss compared to a random number
-int simulateACKLoss(float ackLoss){
-  double randnum = (double)rand() / (double)RAND_MAX;
-  if(randnum < ackLoss){
-    return 1;
-  }
-  return 0;
 }

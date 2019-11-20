@@ -1,4 +1,6 @@
-//Stephen Eaton and Michael Guerrero
+//CPEG419-010
+//Project 2 udpserver.c
+//Stephen Eaton and Michael Guerrero 
 
 #include <ctype.h>          /* for toupper */
 #include <stdio.h>          /* for standard I/O functions */
@@ -11,19 +13,18 @@
 #include <time.h>           // for random time seed
 #include <math.h>           // for time calculation
 
-#define STRING_SIZE 1024
 #define BUFFER_SIZE 80
-#define SERVER_PORT 11235
+#define UDP_PORT 11235
 
 struct udpPacket {
-  unsigned int length;
-  unsigned int sequenceNumber;
+  unsigned short packetLength;
+  unsigned short packetSequence;
   char data[80];
 };
 
 //generate random number to simulate packet loss
-int SimulateLoss(float packetLoss){
-  double randnum = (double)rand()/(double)RAND_MAX;
+int simulateLoss(float packetLoss){
+  double randnum = (double)rand() / (double)RAND_MAX;
   if(randnum < packetLoss){
     return 1;
   }
@@ -31,41 +32,50 @@ int SimulateLoss(float packetLoss){
 }
 
 int main(int argc, char *argv[]) {
+
+  //Define all variables that we used throughout the project
   int userTimeout;
-  float userPacketLoss;  
-  int generatedPacketCount = 0;
-  int generatedBytesCount = 0;
-  int transmittedPacketCount = 0;
-  int droppedPacketCount = 0;
-  int successPacketCount = 0;
-  int ACKReceiveCount = 0;
+  float userPacketLoss;
+  int packetGeneratedCount = 0;
+  int byteCount = 0;
+  int packetTransmitCount = 0;
+  int packetDropCount = 0;
+  int packetSuccessCount = 0;
+  int numAcksReceived = 0;
   int timeoutCount = 0;
+  unsigned short sequenceNumber = 0;
+  FILE *fp;
   
-  if( argc < 3 ){ //print help text
-    printf("Try: ./udpserver [timeout] [packet loss ratio]\n");
+ 
+  //Print message to the user showing the valid layout
+  if( argc < 3 ){
+    printf("Format: ./udpserver [timeout] [packet loss ratio]\n");
     exit(1);
   }
+  
+  //read in the timeout value, and let the user know if it's an invalid time
   if(sscanf (argv[1], "%i", &userTimeout) != 1) { 
-    fprintf(stderr, "Failed to read in timeout value");
+    fprintf(stderr, "Invalid timeout value");
     exit(1);
   }
-  if(sscanf (argv[2], "%f", &userPacketLoss)!=1) { 
-    fprintf(stderr, "Failed to read in packet loss value");
+  if(sscanf (argv[2], "%f", &userPacketLoss)!=1) { //parse loss ratio input
+    fprintf(stderr, "Invalid packet loss value");
     exit(1);
   }  
-
-  printf("Starting server with timeout: %d, and packet loss ratio: %0.1f\n\n", userTimeout, userPacketLoss);
-
+  
   // Use current time as seed for random generator 
   srand(time(0)); 
 
   int sock_server;  /* Socket on which server listens to clients */
+
   struct sockaddr_in server_addr;  /* Internet address structure that
                                         stores server address */
   unsigned short server_port;  /* Port number used by server (local port) */
+
   struct sockaddr_in client_addr;  /* Internet address structure that
                                         stores client address */
   unsigned int client_addr_len;  /* Length of client address structure */
+
   int bytes_sent, bytes_recd; /* number of bytes sent or received */
 
   /* open a socket */
@@ -80,7 +90,7 @@ int main(int argc, char *argv[]) {
   server_addr.sin_addr.s_addr = htonl (INADDR_ANY);  /* This allows choice of
                                         any host interface, if more than one
                                         are present */
-  server_port = SERVER_PORT; /* Server will listen on this port */
+  server_port = UDP_PORT; /* Server will listen on this port */
   server_addr.sin_port = htons(server_port);
 
   /* bind the socket to the local server port */
@@ -93,9 +103,10 @@ int main(int argc, char *argv[]) {
   /* wait for incoming messages in an indefinite loop */
   printf("I am here to listen ... on port %hu\n\n", server_port);
   client_addr_len = sizeof (client_addr);
+
+  struct udpPacket packetReceived;
+  bytes_recd = recvfrom(sock_server, &packetReceived, sizeof(packetReceived), 0, (struct sockaddr *) &client_addr, &client_addr_len);
   
-  struct udpPacket receivedPacket;
-  bytes_recd = recvfrom(sock_server, &receivedPacket, sizeof(receivedPacket), 0, (struct sockaddr *) &client_addr, &client_addr_len);
   //make sure receive was good
   if(bytes_recd < 0){
     perror("Filename data receive error");
@@ -103,72 +114,76 @@ int main(int argc, char *argv[]) {
   }
 
   //copy filename string out of received packet
-  unsigned int nameLength = ntohs(receivedPacket.length);
-  char fileName[nameLength];
-  strncpy(fileName, receivedPacket.data, nameLength); 
-  fileName[nameLength] = '\0';
+  unsigned int fileNameLength = ntohs(packetReceived.packetLength);
+  char fileName[fileNameLength];
+  strncpy(fileName, packetReceived.data, fileNameLength); 
+  fileName[fileNameLength] = '\0'; //add null terminator to string
+
+
+  printf("Requested filename: %s\n\n", fileName);
 
   //setup socket timeout
   double micros = pow(10, userTimeout);
-  int millis = micros/1000;
-  struct timeval toConvert;
-  toConvert.tv_sec = millis/1000;
-  toConvert.tv_usec = millis%1000;
-  setsockopt(sock_server, SOL_SOCKET, SO_RCVTIMEO, (const char*)&toConvert, sizeof toConvert);
+  int millis = micros/1000; 
+  struct timeval tv;
+  tv.tv_sec = millis/1000;
+  tv.tv_usec = millis%1000;
+  setsockopt(sock_server, SOL_SOCKET, SO_RCVTIMEO, (const char*)&tv, sizeof tv);
 
-  //connection variables
-  unsigned short sequenceCount = 0;
-  FILE *fp = NULL;
+ //connection variables
+
   fp = fopen(fileName, "r");
 
   if(fp){
-    char *buffer = calloc(1,BUFFER_SIZE);
+    char *buff = calloc(1,BUFFER_SIZE);
 
-    while(fgets(buffer,BUFFER_SIZE,fp) != NULL){
+    while(fgets(buff,BUFFER_SIZE,fp) != NULL){
       /* prepare the message to send */
-      int bufferLength = strlen(buffer);
+      int buffLen = strlen(buff);
 
       struct udpPacket newPacket;
-      newPacket.length = htons(bufferLength);
-      newPacket.sequenceNumber = htons(sequenceCount);
-      strncpy(newPacket.data, buffer, bufferLength);
+      newPacket.packetLength = htons(buffLen);
+      newPacket.packetSequence = htons(sequenceNumber);
+      strncpy(newPacket.data, buff, buffLen);
 
-      printf("Packet %d generated for transmission with %d data bytes\n", sequenceCount, bufferLength);
-      generatedPacketCount++;
-      generatedBytesCount = generatedBytesCount + bufferLength;
+      printf("Packet %d generated for transmission with %d data bytes\n", sequenceNumber, buffLen);
+      packetGeneratedCount = packetGeneratedCount + 1;
+      byteCount = byteCount + buffLen;
       
-      int ACKReceived = 0;
-      while(!ACKReceived){
-        transmittedPacketCount++;
-        if(!SimulateLoss(userPacketLoss)){
+      //loop transmit until ACK received
+      int ack_recvd = 0;
+
+      while( !ack_recvd ){
+        packetTransmitCount++;
+        if(!simulateLoss(userPacketLoss)){
           //send data packet
-          bytes_sent = sendto(sock_server, &newPacket, bufferLength+4, 0, (struct sockaddr*) &client_addr, client_addr_len);
+          bytes_sent = sendto(sock_server, &newPacket, buffLen+4, 0, (struct sockaddr*) &client_addr, client_addr_len);
           if(bytes_sent < 0){
             perror("Data Packet sending error");
             exit(1);
           }
 
           //print stats
-          printf("Packet %d successfully transmitted with %d data bytes\n", sequenceCount, bytes_sent-4);
-          successPacketCount++;
+          printf("Packet %d successfully transmitted with %d data bytes\n", sequenceNumber, bytes_sent-4);
+          packetSuccessCount++;
         }
         else{
           //print stats
-          printf("Packet %d lost\n", sequenceCount);
-          droppedPacketCount++;
+          printf("Packet %d lost\n", sequenceNumber);
+          packetDropCount++;
         }
 
         //clear buffer
-        memset(buffer, 0, BUFFER_SIZE);
+        memset(buff, 0, BUFFER_SIZE);
 
         //wait for ACK packet
-        unsigned int recv_ack;
+        uint16_t recv_ack;
         bytes_recd = recvfrom(sock_server, &recv_ack, sizeof(recv_ack), 0, (struct sockaddr *) 0, (int *) 0);
         if(bytes_recd < 0){
           if( errno == EAGAIN || errno == EWOULDBLOCK ){
             //print stats
-            printf("Timeout expired for packet numbered %d\n", sequenceCount);
-            printf("Packet %d generated for re-transmission with %d data bytes\n", sequenceCount, bufferLength);
+            printf("Timeout expired for packet numbered %d\n", sequenceNumber);
+            printf("Packet %d generated for re-transmission with %d data bytes\n", sequenceNumber, buffLen);
             timeoutCount++;
           }
           else{
@@ -179,63 +194,42 @@ int main(int argc, char *argv[]) {
         else{
           //Successfully received ACK
           recv_ack = ntohs(recv_ack);
-          if( recv_ack == sequenceCount ){ //verify sequence number
+          if( recv_ack == sequenceNumber ){ 
             printf("ACK %d received\n", recv_ack);
-            ACKReceiveCount++;
-            sequenceCount = 1 - sequenceCount;
-            ACKReceived = 1;
+            numAcksReceived++;
+            sequenceNumber = 1 - sequenceNumber;
+            ack_recvd = 1;
           }  
         } 
       }
     }
     //free memory to cleanup
-    free(buffer);
+    free(buff);
     fclose(fp);
   }
-  else{
-    //Print reason why file couldn't be opened
-    perror("Error opening file");
 
-    char notFoundMsg[16] = "FILE NOT FOUND\n";
-    int bufferLength = 16;
-    
-    struct udpPacket newPacket;
-    newPacket.length = htons(bufferLength);
-    newPacket.sequenceNumber = htons(sequenceCount);
-    strncpy(newPacket.data, notFoundMsg, bufferLength);
+  //Send end of transmission packet
+  struct udpPacket endingPacket;
+  endingPacket.packetLength = htons(0);
+  endingPacket.packetSequence = htons(sequenceNumber);
 
-    bytes_sent = sendto(sock_server, &newPacket, bufferLength+4, 0, (struct sockaddr*) &client_addr, client_addr_len);
-    if(bytes_sent < 0){
-      perror("Not Found Packet sending error");
-      exit(1);
-    }
-
-    printf("Packet %d transmitted with %d data bytes\n", sequenceCount, bytes_sent-4);
-    sequenceCount = 1 - sequenceCount;
-  }
-
-  struct udpPacket endTransmission;
-  endTransmission.length = htons(0);
-  endTransmission.sequenceNumber = htons(sequenceCount);
-
-  bytes_sent = sendto(sock_server, &endTransmission, 4, 0, (struct sockaddr*) &client_addr, client_addr_len);
+  bytes_sent = sendto(sock_server, &endingPacket, 4, 0, (struct sockaddr*) &client_addr, client_addr_len);
   if(bytes_sent < 0){
     perror("EOT Packet sending error");
     exit(1);
   }
 
-  printf("\n");
-  printf("End of transmission packet with sequence number %d transmitted\n", sequenceCount);
-  
-  //Print final results
-  printf("Number of data packets generated for transmission: %d\n", generatedPacketCount);
-  printf("Total number of data bytes generated for transmission, initial transmission only: %d\n", generatedBytesCount);
-  printf("Total number of data packets generated for retransmission: %d\n", transmittedPacketCount);
-  printf("Number of data packets dropped due to loss: %d\n", droppedPacketCount);
-  printf("Number of data packets transmitted successfully: %d\n", successPacketCount);
-  printf("Number of ACKs received: %d\n", ACKReceiveCount);
-  printf("Number of timeouts expired: %d\n", timeoutCount);
-  
+  //print stats
+  printf("\nEnd of transmission packet with sequence number %d transmitted\n", sequenceNumber);
+
+  printf("Number of data packets generated for transmission: %d\n", packetGeneratedCount);
+  printf("Total number of data bytes generated for transmission: %d\n", byteCount);
+  printf("Total number of data packets generated for retransmission: %d\n", packetTransmitCount);
+  printf("Number of data packets dropped due to loss: %d\n", packetDropCount);
+  printf("Number of data packets transmitted successfully: %d\n", packetSuccessCount);
+  printf("Number of ACKs received: %d\n", numAcksReceived);
+  printf("timeouts expired count: %d\n", timeoutCount);
+
   /* close the socket */
   close(sock_server);
   exit(0);
