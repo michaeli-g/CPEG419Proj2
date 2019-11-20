@@ -23,7 +23,7 @@ struct udpPacket {
   char data[80];
 };
 
-//generate random number to simulate ACK loss
+//Define the simulateACKLoss function
 int simulateACKLoss(float ackLoss){
   double genRandomNum = (double)rand() / (double)RAND_MAX;
   if(genRandomNum < ackLoss){
@@ -33,7 +33,8 @@ int simulateACKLoss(float ackLoss){
 }
 
 int main(int argc, char *argv[]) {
-
+	
+  //Initialize variables that we used in this assignment	
   char fileName[FILE_NAME_LENGTH];
   float userACKLoss;
   int packetReceivedCount = 0;
@@ -44,14 +45,11 @@ int main(int argc, char *argv[]) {
   int ACKDropCount = 0;
   int ACKGeneratedCount = 0;
   int endCheck = 1;
-  FILE *fp = fopen("out.txt", "wb");
-
+  FILE *fp = fopen("out.txt", "w");
+  srand(time(0)); 
+  
   if( argc < 3 ){ 
     printf("Format: ./udpclient [file name] [ack loss ratio]\n");
-    exit(1);
-  }
-  if(strlen(argv[1]) >= FILE_NAME_LENGTH) { 
-    fprintf(stderr, "Invalid fileName length");
     exit(1);
   }
   strcpy(fileName, argv[1]);
@@ -60,11 +58,6 @@ int main(int argc, char *argv[]) {
     fprintf(stderr, "Invalid ACK loss value");
     exit(1);
   }
-
-  //printf("Connecting to server to retrieve filename: %s, with ACK loss ratio: %0.1f\n\n", fileName, userACKLoss);
-
-  // Use current time as seed for random number generator 
-  srand(time(0)); 
 
   int sock_client;  /* Socket used by client */ 
 
@@ -85,9 +78,6 @@ int main(int argc, char *argv[]) {
     perror("Client: can't open datagram socket\n");
     exit(1);
   }
-
-    /* initialize client address information */
-  client_port = 0;   /* This allows choice of any available local port */
 
   /* clear client address structure and initialize with client address */
   memset(&client_addr, 0, sizeof(client_addr));
@@ -120,7 +110,6 @@ int main(int argc, char *argv[]) {
   unsigned short server_port = SERVER_PORT;
   server_addr.sin_port = htons(server_port);
 
-  /* send filename */
   unsigned int sequenceNumber = 0;
   unsigned int buffLen = strlen(fileName);
 
@@ -196,7 +185,7 @@ int main(int argc, char *argv[]) {
     }
   }
   if(fp){
-    fclose(fp); //close output file
+    fclose(fp);
   }
 
   printf("Total number of data packets received successfully: %d\n", packetReceivedCount);
