@@ -1,0 +1,13 @@
+Student's names: Stephen Eaton and Michael Guerrero
+
+Source files:
+	client file:  udpclient.c 
+	server file:  udpserver.c
+
+Executable files: 
+	client executable: udpclient 
+	server executable: udpserver
+
+Script files: 
+	client script: udpclientScript.txt
+	server script: udpserverScript.txt
