@@ -117,6 +117,7 @@ int main(int argc, char *argv[]) {
   unsigned int sequenceNumber = 0;
   unsigned int buffLen = strlen(fileName);
 
+  //Make the new packet
   struct udpPacket newPacket;
   newPacket.packetLength = htons(buffLen);
   newPacket.packetSequence = htons(sequenceNumber);

@@ -133,6 +133,7 @@ int main(int argc, char *argv[]) {
   if(fp){
     char *buff = calloc(1,BUFFER_SIZE);
 	
+	//Continue to read in data until null value is reached
     while(fgets(buff,BUFFER_SIZE,fp) != NULL){
       int buffLen = strlen(buff);
       struct udpPacket newPacket;
@@ -150,14 +151,15 @@ int main(int argc, char *argv[]) {
       while( !ACKReceived ){
         packetTransmitCount++;
         if(!simulateLoss(userPacketLoss)){
-          //send data packet
+          
+		  //send the packet
           bytes_sent = sendto(sock_server, &newPacket, buffLen+4, 0, (struct sockaddr*) &client_addr, client_addr_len);
           if(bytes_sent < 0){
             perror("Data Packet sending error");
             exit(1);
           }
 
-          //print stats
+          //print the message
           printf("Packet %d successfully transmitted with %d data bytes\n", sequenceNumber, bytes_sent-4);
           packetSuccessCount++;
         }
@@ -198,7 +200,8 @@ int main(int argc, char *argv[]) {
     free(buff);
     fclose(fp);
   }
-
+  
+  //Make a udpPacket for the end of transmission
   struct udpPacket endingPacket;
   endingPacket.packetLength = htons(0);
   endingPacket.packetSequence = htons(sequenceNumber);
